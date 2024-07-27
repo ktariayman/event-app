@@ -4,16 +4,21 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
+	"github.com/dgrijalva/jwt-go"
 	"github.com/gofiber/fiber/v2"
 	"github.com/joho/godotenv"
 	"github.com/ktariayman/go-api/models"
 	"github.com/ktariayman/go-api/storage"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
+
 type Repo struct {
-	DB *gorm.DB 
+	DB *gorm.DB
 }
+
 type Event struct {
 	gorm.Model
 	Title       string `json:"title"`
@@ -22,23 +27,25 @@ type Event struct {
 	Location    string `json:"location"`
 }
 
-
+type User struct {
+	gorm.Model
+	Name     string `json:"name"`
+	Email    string `json:"email" gorm:"unique"`
+	Password string `json:"-"`
+}
 
 func (r * Repo) CreateEvent (context *fiber.Ctx) error{
 	event := Event{}
-	err := context.BodyParser(&event)	
-
+	err := context.BodyParser(&event)
 	if err != nil {
 		context.Status(http.StatusUnprocessableEntity).JSON(&fiber.Map{"message": "request failed"})
 		return err
 	}
-
 	err = r.DB.Create(&event).Error
 	if err != nil {
 		context.Status(http.StatusBadRequest).JSON(&fiber.Map{"message": "could not create event"})
 		return err
 	}
-
 	context.Status(http.StatusOK).JSON(&fiber.Map{"message": "event has been added"})
 	return nil
 }
@@ -116,6 +123,82 @@ func (r *Repo) UpdateEvent(context *fiber.Ctx) error {
 	context.Status(http.StatusOK).JSON(&fiber.Map{"message": "event updated successfully"})
 	return nil
 }
+
+func (r *Repo) RegisterUser(context *fiber.Ctx) error {
+	user := User{}
+	err := context.BodyParser(&user)
+	if err != nil {
+		context.Status(http.StatusUnprocessableEntity).JSON(&fiber.Map{"message": "request failed"})
+		return err
+	}
+
+	// Check if email already exists
+	existingUser := User{}
+	err = r.DB.Where("email = ?", user.Email).First(&existingUser).Error
+	if err == nil {
+		context.Status(http.StatusBadRequest).JSON(&fiber.Map{"message": "email already in use"})
+		return err
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), 14)
+	if err != nil {
+		context.Status(http.StatusInternalServerError).JSON(&fiber.Map{"message": "could not hash password"})
+		return err
+	}
+	user.Password = string(hashedPassword)
+
+	err = r.DB.Create(&user).Error
+	if err != nil {
+		context.Status(http.StatusBadRequest).JSON(&fiber.Map{"message": "could not register user"})
+		return err
+	}
+
+	context.Status(http.StatusOK).JSON(&fiber.Map{"message": "user registered successfully"})
+	return nil
+}
+
+
+func (r *Repo) LoginUser(context *fiber.Ctx) error {
+	data := struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}{}
+
+	err := context.BodyParser(&data)
+	if err != nil {
+		context.Status(http.StatusUnprocessableEntity).JSON(&fiber.Map{"message": "request failed"})
+		return err
+	}
+
+	user := User{}
+	err = r.DB.Where("email = ?", data.Email).First(&user).Error
+	if err != nil {
+		context.Status(http.StatusUnauthorized).JSON(&fiber.Map{"message": "invalid credentials"})
+		return err
+	}
+
+	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(data.Password))
+	if err != nil {
+		context.Status(http.StatusUnauthorized).JSON(&fiber.Map{"message": "invalid credentials"})
+		return err
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"userID": user.ID,
+		"exp":    time.Now().Add(time.Hour * 72).Unix(),
+	})
+
+	tokenString, err := token.SignedString([]byte(os.Getenv("JWT_SECRET")))
+	if err != nil {
+		context.Status(http.StatusInternalServerError).JSON(&fiber.Map{"message": "could not login"})
+		return err
+	}
+
+	context.Status(http.StatusOK).JSON(&fiber.Map{"token": tokenString})
+	return nil
+}
+
+
 func (r *Repo) SetupRoutes(app *fiber.App) {
 api := app.Group("/api")
 	api.Post("/create_event", r.CreateEvent)
@@ -123,35 +206,37 @@ api := app.Group("/api")
 	api.Get("/get_events/:id", r.GetEventByID)
 	api.Get("/events", r.GetEvents)
 	api.Put("/update_event/:id", r.UpdateEvent)
+	api.Post("/register", r.RegisterUser)
+	api.Post("/login", r.LoginUser)
 }
 func main(){
 	err := godotenv.Load(".env")
-
-		if err != nil {
-			log.Fatal(err)
-		}
-		config := &storage.Config{
+	
+ 	if err != nil {
+		 log.Fatal(err)
+	 }
+	 config := &storage.Config{
 			Host:     os.Getenv("DB_HOST"),
 			Port:     os.Getenv("DB_PORT"),
 			Password: os.Getenv("DB_PASS"),
 			User:     os.Getenv("DB_USER"),
 			SSLMode:  os.Getenv("DB_SSLMODE"),
 			DBName:   os.Getenv("DB_NAME"),
-		}
-		db, err := storage.NewConnection(config)
-
-		if err != nil {
-			log.Fatal("could not load the database")
-		}
-		err = models.MigrateEvents(db)
-		if err != nil {
-			log.Fatal("could not migrate db")
-		}
-
-		r:= Repo{
-			DB: db,
-		}
-		app:= fiber.New()
-		r.SetupRoutes(app)
-		app.Listen(":8080")
 	}
+	db, err := storage.NewConnection(config)
+	if err != nil {
+		log.Fatal("could not load the database")
+	}
+	err = models.MigrateEvents(db)
+	if err != nil {
+		log.Fatal("could not migrate db")
+	}
+	err = models.MigrateUsers(db)
+	if err != nil {
+		log.Fatal("could not migrate db")
+	}
+	r := Repo{DB: db}
+	app := fiber.New()
+	r.SetupRoutes(app)
+	app.Listen(":8080")
+}
