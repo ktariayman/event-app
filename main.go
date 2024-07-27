@@ -31,7 +31,7 @@ type User struct {
 	gorm.Model
 	Name     string `json:"name"`
 	Email    string `json:"email" gorm:"unique"`
-	Password string `json:"-"`
+	Password string `json:"password"`
 }
 
 func (r * Repo) CreateEvent (context *fiber.Ctx) error{
@@ -140,7 +140,7 @@ func (r *Repo) RegisterUser(context *fiber.Ctx) error {
 		return err
 	}
 
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), 14)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 	if err != nil {
 		context.Status(http.StatusInternalServerError).JSON(&fiber.Map{"message": "could not hash password"})
 		return err
@@ -166,6 +166,7 @@ func (r *Repo) LoginUser(context *fiber.Ctx) error {
 
 	err := context.BodyParser(&data)
 	if err != nil {
+		log.Println("Error parsing request body:", err)
 		context.Status(http.StatusUnprocessableEntity).JSON(&fiber.Map{"message": "request failed"})
 		return err
 	}
@@ -177,8 +178,13 @@ func (r *Repo) LoginUser(context *fiber.Ctx) error {
 		return err
 	}
 
+	log.Println("Stored hashed password:", user.Password)
+	log.Println("Provided password:", data.Password)
+
+	// Compare passwords directly
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(data.Password))
 	if err != nil {
+		log.Println("Password comparison failed:", err)
 		context.Status(http.StatusUnauthorized).JSON(&fiber.Map{"message": "invalid credentials"})
 		return err
 	}
@@ -198,9 +204,8 @@ func (r *Repo) LoginUser(context *fiber.Ctx) error {
 	return nil
 }
 
-
 func (r *Repo) SetupRoutes(app *fiber.App) {
-api := app.Group("/api")
+	api := app.Group("/api")
 	api.Post("/create_event", r.CreateEvent)
 	api.Delete("/delete_event/:id", r.DeleteEvent)
 	api.Get("/get_events/:id", r.GetEventByID)
@@ -211,17 +216,16 @@ api := app.Group("/api")
 }
 func main(){
 	err := godotenv.Load(".env")
-	
- 	if err != nil {
-		 log.Fatal(err)
-	 }
-	 config := &storage.Config{
-			Host:     os.Getenv("DB_HOST"),
-			Port:     os.Getenv("DB_PORT"),
-			Password: os.Getenv("DB_PASS"),
-			User:     os.Getenv("DB_USER"),
-			SSLMode:  os.Getenv("DB_SSLMODE"),
-			DBName:   os.Getenv("DB_NAME"),
+	if err != nil {
+		log.Fatal(err)
+	}
+	config := &storage.Config{
+		Host:     os.Getenv("DB_HOST"),
+		Port:     os.Getenv("DB_PORT"),
+		Password: os.Getenv("DB_PASS"),
+		User:     os.Getenv("DB_USER"),
+		SSLMode:  os.Getenv("DB_SSLMODE"),
+		DBName:   os.Getenv("DB_NAME"),
 	}
 	db, err := storage.NewConnection(config)
 	if err != nil {
