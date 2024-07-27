@@ -9,6 +9,7 @@ import (
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gofiber/fiber/v2"
 	"github.com/joho/godotenv"
+	"github.com/ktariayman/go-api/auth"
 	"github.com/ktariayman/go-api/models"
 	"github.com/ktariayman/go-api/storage"
 	"golang.org/x/crypto/bcrypt"
@@ -21,10 +22,12 @@ type Repo struct {
 
 type Event struct {
 	gorm.Model
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Date        string `json:"date"`
-	Location    string `json:"location"`
+	Title        string         `json:"title"`
+	Description  string         `json:"description"`
+	Date         string         `json:"date"`
+	Location     string         `json:"location"`
+	UserID       uint           `json:"user_id"`
+	Participants []models.User  `gorm:"many2many:event_participants;" json:"participants"`
 }
 
 type User struct {
@@ -34,8 +37,11 @@ type User struct {
 	Password string `json:"password"`
 }
 
-func (r * Repo) CreateEvent (context *fiber.Ctx) error{
-	event := Event{}
+func (r *Repo) CreateEvent(context *fiber.Ctx) error {
+	userID := context.Locals("userID").(float64) 
+	event := Event{
+		UserID: uint(userID),
+	}
 	err := context.BodyParser(&event)
 	if err != nil {
 		context.Status(http.StatusUnprocessableEntity).JSON(&fiber.Map{"message": "request failed"})
@@ -51,13 +57,21 @@ func (r * Repo) CreateEvent (context *fiber.Ctx) error{
 }
 
 func (r *Repo) DeleteEvent(context *fiber.Ctx) error {
+	userID := context.Locals("userID").(float64)
 	id := context.Params("id")
 	if id == "" {
 		context.Status(http.StatusInternalServerError).JSON(&fiber.Map{"message": "id cannot be empty"})
 		return nil
 	}
 
-	err := r.DB.Delete(&models.Event{}, id).Error
+	event := Event{}
+	err := r.DB.Where("id = ? AND user_id = ?", id, uint(userID)).First(&event).Error
+	if err != nil {
+		context.Status(http.StatusBadRequest).JSON(&fiber.Map{"message": "could not find event"})
+		return err
+	}
+
+	err = r.DB.Delete(&event).Error
 	if err != nil {
 		context.Status(http.StatusBadRequest).JSON(&fiber.Map{"message": "could not delete event"})
 		return err
@@ -99,15 +113,14 @@ func (r *Repo) GetEventByID(context *fiber.Ctx) error {
 }
 
 func (r *Repo) UpdateEvent(context *fiber.Ctx) error {
+	userID := context.Locals("userID").(float64)
 	id := context.Params("id")
 	event := &models.Event{}
-
-	err := r.DB.Where("id = ?", id).First(event).Error
+	err := r.DB.Where("id = ? AND user_id = ?", id, uint(userID)).First(event).Error
 	if err != nil {
 		context.Status(http.StatusBadRequest).JSON(&fiber.Map{"message": "event not found"})
 		return err
 	}
-
 	err = context.BodyParser(event)
 	if err != nil {
 		context.Status(http.StatusUnprocessableEntity).JSON(&fiber.Map{"message": "request failed"})
@@ -204,17 +217,25 @@ func (r *Repo) LoginUser(context *fiber.Ctx) error {
 	return nil
 }
 
+func (r *Repo) LogoutUser(context *fiber.Ctx) error {
+	context.Status(http.StatusOK).JSON(&fiber.Map{"message": "user logged out successfully"})
+	return nil
+}
+
 func (r *Repo) SetupRoutes(app *fiber.App) {
 	api := app.Group("/api")
-	api.Post("/create_event", r.CreateEvent)
-	api.Delete("/delete_event/:id", r.DeleteEvent)
-	api.Get("/get_events/:id", r.GetEventByID)
-	api.Get("/events", r.GetEvents)
-	api.Put("/update_event/:id", r.UpdateEvent)
 	api.Post("/register", r.RegisterUser)
 	api.Post("/login", r.LoginUser)
+	api.Post("/logout", r.LogoutUser)
+
+	api.Post("/event", auth.Protected(), r.CreateEvent)
+	api.Delete("/event/:id", auth.Protected(), r.DeleteEvent)
+	api.Put("/event/:id", auth.Protected(), r.UpdateEvent)
+	api.Get("/events/:id", r.GetEventByID)
+	api.Get("/events", r.GetEvents)
 }
-func main(){
+
+func main() {
 	err := godotenv.Load(".env")
 	if err != nil {
 		log.Fatal(err)

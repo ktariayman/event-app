@@ -6,10 +6,8 @@ type User struct {
 	gorm.Model
 	Name     string `json:"name"`
 	Email    string `json:"email" gorm:"unique"`
-	Password string `json:"-"`
+	Password string `json:"password"`
 }
-
-
 
 func MigrateUsers(db *gorm.DB) error {
 	return db.AutoMigrate(&User{})
