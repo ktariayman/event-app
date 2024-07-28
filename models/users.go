@@ -10,6 +10,11 @@ type User struct {
     Events   []Event `gorm:"many2many:event_participants;" json:"events"`
 }
 
+func (user *User) BeforeDelete(tx *gorm.DB) (err error) {
+    err = tx.Model(user).Association("Events").Clear()
+    return
+}
+
 func MigrateUsers(db *gorm.DB) error {
     return db.AutoMigrate(&User{})
 }

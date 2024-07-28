@@ -61,25 +61,21 @@ func (r *Repo) DeleteEvent(context *fiber.Ctx) error {
 	userID := context.Locals("userID").(float64)
 	id := context.Params("id")
 	if id == "" {
-		context.Status(http.StatusInternalServerError).JSON(&fiber.Map{"message": "id cannot be empty"})
-		return nil
+					return context.Status(http.StatusInternalServerError).JSON(fiber.Map{"message": "id cannot be empty"})
 	}
 
-	event := Event{}
+	event := models.Event{}
 	err := r.DB.Where("id = ? AND user_id = ?", id, uint(userID)).First(&event).Error
 	if err != nil {
-		context.Status(http.StatusBadRequest).JSON(&fiber.Map{"message": "could not find event"})
-		return err
+					return context.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": "could not find event"})
 	}
 
 	err = r.DB.Delete(&event).Error
 	if err != nil {
-		context.Status(http.StatusBadRequest).JSON(&fiber.Map{"message": "could not delete event"})
-		return err
+					return context.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": "could not delete event"})
 	}
 
-	context.Status(http.StatusOK).JSON(&fiber.Map{"message": "event deleted successfully"})
-	return nil
+	return context.Status(fiber.StatusOK).JSON(fiber.Map{"message": "event deleted successfully"})
 }
 
 func (r *Repo) GetEvents(context *fiber.Ctx) error {
@@ -295,29 +291,21 @@ func (r *Repo) GetAllUsers(context *fiber.Ctx) error {
 func (r *Repo) DeleteUser(context *fiber.Ctx) error {
 	id := context.Params("id")
 	if id == "" {
-					return context.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-									"message": "id cannot be empty",
-					})
+					return context.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": "id cannot be empty"})
 	}
 
 	user := models.User{}
 	err := r.DB.Where("id = ?", id).First(&user).Error
 	if err != nil {
-					return context.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-									"message": "could not find user",
-					})
+					return context.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": "could not find user"})
 	}
 
 	err = r.DB.Delete(&user).Error
 	if err != nil {
-					return context.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-									"message": "could not delete user",
-					})
+					return context.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"message": "could not delete user"})
 	}
 
-	return context.Status(fiber.StatusOK).JSON(fiber.Map{
-					"message": "user deleted successfully",
-	})
+	return context.Status(fiber.StatusOK).JSON(fiber.Map{"message": "user deleted successfully"})
 }
 
 func (r *Repo) UpdateUser(context *fiber.Ctx) error {
