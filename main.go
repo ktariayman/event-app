@@ -10,6 +10,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/joho/godotenv"
 	"github.com/ktariayman/go-api/auth"
+	"github.com/ktariayman/go-api/helpers"
 	"github.com/ktariayman/go-api/models"
 	"github.com/ktariayman/go-api/storage"
 	"golang.org/x/crypto/bcrypt"
@@ -82,16 +83,23 @@ func (r *Repo) DeleteEvent(context *fiber.Ctx) error {
 }
 
 func (r *Repo) GetEvents(context *fiber.Ctx) error {
-	events := &[]models.Event{}
-
-	err := r.DB.Find(events).Error
+	events := []models.Event{}
+	err := r.DB.Preload("Participants").Find(&events).Error
 	if err != nil {
-		context.Status(http.StatusBadRequest).JSON(&fiber.Map{"message": "could not get events"})
-		return err
+					return context.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+									"message": "could not get events",
+					})
 	}
 
-	context.Status(http.StatusOK).JSON(&fiber.Map{"message": "events fetched successfully", "data": events})
-	return nil
+	eventResponses := make([]helpers.EventResponse, len(events))
+	for i, event := range events {
+					eventResponses[i] = helpers.ToEventResponse(event)
+	}
+
+	return context.Status(fiber.StatusOK).JSON(fiber.Map{
+					"message": "events fetched successfully",
+					"data":    eventResponses,
+	})
 }
 
 func (r *Repo) GetEventByID(context *fiber.Ctx) error {
@@ -137,6 +145,48 @@ func (r *Repo) UpdateEvent(context *fiber.Ctx) error {
 	return nil
 }
 
+func (r *Repo) ParticipateInEvent(context *fiber.Ctx) error {
+	userID := uint(context.Locals("userID").(float64))
+	eventID := context.Params("id")
+	if eventID == "" {
+					return context.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": "Event ID cannot be empty"})
+	}
+
+	event := &models.Event{}
+	err := r.DB.Preload("Participants").Where("id = ?", eventID).First(event).Error
+	if err != nil {
+					return context.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": "Event not found"})
+	}
+
+	user := &models.User{}
+	err = r.DB.Where("id = ?", userID).First(user).Error
+	if err != nil {
+					return context.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": "User not found"})
+	}
+
+	// Check if the user is already a participant
+	isParticipant := false
+	for _, participant := range event.Participants {
+					if participant.ID == userID {
+									isParticipant = true
+									break
+					}
+	}
+
+	if isParticipant {
+					return context.Status(fiber.StatusOK).JSON(fiber.Map{"message": "You are already a participant in this event"})
+	}
+
+	err = r.DB.Model(event).Association("Participants").Append(user)
+	if err != nil {
+					return context.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"message": "Could not participate in event"})
+	}
+
+	return context.Status(fiber.StatusOK).JSON(fiber.Map{"message": "Successfully participated in event"})
+}
+
+
+
 func (r *Repo) RegisterUser(context *fiber.Ctx) error {
 	user := User{}
 	err := context.BodyParser(&user)
@@ -169,7 +219,6 @@ func (r *Repo) RegisterUser(context *fiber.Ctx) error {
 	context.Status(http.StatusOK).JSON(&fiber.Map{"message": "user registered successfully"})
 	return nil
 }
-
 
 func (r *Repo) LoginUser(context *fiber.Ctx) error {
 	data := struct {
@@ -222,6 +271,94 @@ func (r *Repo) LogoutUser(context *fiber.Ctx) error {
 	return nil
 }
 
+
+func (r *Repo) GetAllUsers(context *fiber.Ctx) error {
+	users := []models.User{}
+	err := r.DB.Preload("Events").Find(&users).Error
+	if err != nil {
+					return context.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+									"message": "could not get users",
+					})
+	}
+
+	userResponses := make([]helpers.UserResponse, len(users))
+	for i, user := range users {
+					userResponses[i] = helpers.ToUserResponse(user)
+	}
+
+	return context.Status(fiber.StatusOK).JSON(fiber.Map{
+					"message": "users fetched successfully",
+					"data":    userResponses,
+	})
+}
+
+func (r *Repo) DeleteUser(context *fiber.Ctx) error {
+	id := context.Params("id")
+	if id == "" {
+					return context.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+									"message": "id cannot be empty",
+					})
+	}
+
+	user := models.User{}
+	err := r.DB.Where("id = ?", id).First(&user).Error
+	if err != nil {
+					return context.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+									"message": "could not find user",
+					})
+	}
+
+	err = r.DB.Delete(&user).Error
+	if err != nil {
+					return context.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+									"message": "could not delete user",
+					})
+	}
+
+	return context.Status(fiber.StatusOK).JSON(fiber.Map{
+					"message": "user deleted successfully",
+	})
+}
+
+func (r *Repo) UpdateUser(context *fiber.Ctx) error {
+	id := context.Params("id")
+	if id == "" {
+					return context.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+									"message": "id cannot be empty",
+					})
+	}
+
+	user := models.User{}
+	err := r.DB.Where("id = ?", id).First(&user).Error
+	if err != nil {
+					return context.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+									"message": "could not find user",
+					})
+	}
+
+	err = context.BodyParser(&user)
+	if err != nil {
+					return context.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{
+									"message": "request failed",
+					})
+	}
+
+	err = r.DB.Save(&user).Error
+	if err != nil {
+					return context.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+									"message": "could not update user",
+					})
+	}
+
+	return context.Status(fiber.StatusOK).JSON(fiber.Map{
+					"message": "user updated successfully",
+	})
+}
+
+
+
+
+
 func (r *Repo) SetupRoutes(app *fiber.App) {
 	api := app.Group("/api")
 	api.Post("/register", r.RegisterUser)
@@ -231,9 +368,15 @@ func (r *Repo) SetupRoutes(app *fiber.App) {
 	api.Post("/event", auth.Protected(), r.CreateEvent)
 	api.Delete("/event/:id", auth.Protected(), r.DeleteEvent)
 	api.Put("/event/:id", auth.Protected(), r.UpdateEvent)
-	api.Get("/events/:id", r.GetEventByID)
-	api.Get("/events", r.GetEvents)
-}
+	api.Get("/event/:id", r.GetEventByID)
+	api.Get("/event", r.GetEvents)
+	api.Post("/event/:id/participate", auth.Protected(), r.ParticipateInEvent) 
+	
+	api.Get("/user",  r.GetAllUsers)
+	api.Delete("/user/:id",  r.DeleteUser)
+	api.Put("/user/:id",  r.UpdateUser)
+}	
+
 
 func main() {
 	err := godotenv.Load(".env")
