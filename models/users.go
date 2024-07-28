@@ -7,6 +7,7 @@ type User struct {
     Name     string `json:"name"`
     Email    string `json:"email" gorm:"unique"`
     Password string `json:"password"`
+    Admin    bool   `json:"admin" gorm:"default:false"`
     Events   []Event `gorm:"many2many:event_participants;" json:"events"`
 }
 

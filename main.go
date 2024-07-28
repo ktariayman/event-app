@@ -9,8 +9,8 @@ import (
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gofiber/fiber/v2"
 	"github.com/joho/godotenv"
-	"github.com/ktariayman/go-api/auth"
 	"github.com/ktariayman/go-api/helpers"
+	auth "github.com/ktariayman/go-api/middleware"
 	"github.com/ktariayman/go-api/models"
 	"github.com/ktariayman/go-api/storage"
 	"golang.org/x/crypto/bcrypt"
@@ -366,6 +366,46 @@ func (r *Repo) SetupRoutes(app *fiber.App) {
 }	
 
 
+
+func seed(db *gorm.DB) {
+    
+	adminPassword, err := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
+	if err != nil {
+					log.Fatalf("Failed to hash password: %v", err)
+	}
+	admin := models.User{
+					Name:     "Admin User",
+					Email:    "admin@example.com",
+					Password: string(adminPassword),
+					Admin:    true,
+	}
+	db.Create(&admin)
+
+	
+	userPassword, err := bcrypt.GenerateFromPassword([]byte("user123"), bcrypt.DefaultCost)
+	if err != nil {
+					log.Fatalf("Failed to hash password: %v", err)
+	}
+	user := models.User{
+					Name:     " User",
+					Email:    "user@example.com",
+					Password: string(userPassword),
+					Admin:    false,
+	}
+	db.Create(&user)
+
+	event := models.Event{
+					Title:       "Sample Event",
+					Description: "This is a sample event",
+					Date:        time.Now().Format("2006-01-02"),
+					Location:    "Sample Location",
+					UserID:      admin.ID,
+	}
+	db.Create(&event)
+}
+
+
+
 func main() {
 	err := godotenv.Load(".env")
 	if err != nil {
@@ -391,6 +431,7 @@ func main() {
 	if err != nil {
 		log.Fatal("could not migrate db")
 	}
+	seed(db)
 	r := Repo{DB: db}
 	app := fiber.New()
 	r.SetupRoutes(app)
