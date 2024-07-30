@@ -1,6 +1,6 @@
 package helpers
 
-import "github.com/ktariayman/go-api/models"
+import "github.com/ktariayman/go-api/internal/models"
 
 type UserResponse struct {
     ID       uint   `json:"id"`
