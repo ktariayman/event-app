@@ -8,11 +8,11 @@ import (
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gofiber/fiber/v2"
-	"github.com/joho/godotenv"
 	"github.com/ktariayman/go-api/helpers"
 	auth "github.com/ktariayman/go-api/middleware"
 	"github.com/ktariayman/go-api/models"
-	"github.com/ktariayman/go-api/storage"
+	"github.com/ktariayman/go-api/pkg/config"
+	"github.com/ktariayman/go-api/pkg/database"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
@@ -446,21 +446,14 @@ func seed(db *gorm.DB) {
 
 
 func main() {
-	err := godotenv.Load(".env")
+	cfg, err := config.LoadConfig()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Could not load config: %v", err)
 	}
-	config := &storage.Config{
-		Host:     os.Getenv("DB_HOST"),
-		Port:     os.Getenv("DB_PORT"),
-		Password: os.Getenv("DB_PASS"),
-		User:     os.Getenv("DB_USER"),
-		SSLMode:  os.Getenv("DB_SSLMODE"),
-		DBName:   os.Getenv("DB_NAME"),
-	}
-	db, err := storage.NewConnection(config)
+
+	db, err := database.NewConnection(cfg)
 	if err != nil {
-		log.Fatal("could not load the database")
+		log.Fatalf("Could not connect to the database: %v", err)
 	}
 	err = models.MigrateEvents(db)
 	if err != nil {
