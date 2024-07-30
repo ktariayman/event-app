@@ -343,6 +343,44 @@ func (r *Repo) UpdateUser(context *fiber.Ctx) error {
 	})
 }
 
+func (r *Repo) CancelParticipation(context *fiber.Ctx) error {
+	userID := uint(context.Locals("userID").(float64))
+	eventID := context.Params("id")
+	if eventID == "" {
+					return context.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": "Event ID cannot be empty"})
+	}
+
+	event := &models.Event{}
+	err := r.DB.Preload("Participants").Where("id = ?", eventID).First(event).Error
+	if err != nil {
+					return context.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": "Event not found"})
+	}
+
+	user := &models.User{}
+	err = r.DB.Where("id = ?", userID).First(user).Error
+	if err != nil {
+					return context.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": "User not found"})
+	}
+
+	isParticipant := false
+	for _, participant := range event.Participants {
+					if participant.ID == userID {
+									isParticipant = true
+									break
+					}
+	}
+
+	if !isParticipant {
+					return context.Status(fiber.StatusOK).JSON(fiber.Map{"message": "You are not a participant in this event"})
+	}
+
+	err = r.DB.Model(event).Association("Participants").Delete(user)
+	if err != nil {
+					return context.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"message": "Could not cancel participation in event"})
+	}
+
+	return context.Status(fiber.StatusOK).JSON(fiber.Map{"message": "Successfully canceled participation in event"})
+}
 
 
 
@@ -359,7 +397,8 @@ func (r *Repo) SetupRoutes(app *fiber.App) {
 	api.Get("/event/:id", r.GetEventByID)
 	api.Get("/event", r.GetEvents)
 	api.Post("/event/:id/participate", auth.Protected(), r.ParticipateInEvent) 
-	
+	api.Post("/event/:id/cancel", auth.Protected(), r.CancelParticipation)
+
 	api.Get("/user",  r.GetAllUsers)
 	api.Delete("/user/:id",  r.DeleteUser)
 	api.Put("/user/:id",  r.UpdateUser)
