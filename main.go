@@ -4,11 +4,14 @@ import (
 	"log"
 
 	"github.com/gofiber/fiber/v2"
+	_ "github.com/ktariayman/go-api/docs"
+	"github.com/ktariayman/go-api/internal/models"
 	"github.com/ktariayman/go-api/internal/routes"
 	"github.com/ktariayman/go-api/internal/seed"
-	"github.com/ktariayman/go-api/internal/models"
 	"github.com/ktariayman/go-api/pkg/config"
 	"github.com/ktariayman/go-api/pkg/database"
+
+	swagger "github.com/arsmn/fiber-swagger/v2"
 )
 
 func main() {
@@ -29,8 +32,10 @@ func main() {
 	if err != nil {
 		log.Fatal("could not migrate db")
 	}
-	seed.Seed(db)
+	seed.Seed(db)    
+	
 	app := fiber.New()
+	app.Get("/swagger/*", swagger.HandlerDefault)
 	routes.SetupRoutes(app, db)
 	log.Fatal(app.Listen(":8080"))
 }
