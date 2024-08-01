@@ -34,8 +34,11 @@ func main() {
 	}
 	seed.Seed(db)    
 	
-	app := fiber.New()
-	app.Get("/swagger/*", swagger.HandlerDefault)
+	app := fiber.New()    
+    app.Static("/openapi.yaml", "openapi.yaml")
+    app.Get("/swagger/*", swagger.New(swagger.Config{
+        URL: "/openapi.yaml",
+    }))
 	routes.SetupRoutes(app, db)
 	log.Fatal(app.Listen(":8080"))
 }
