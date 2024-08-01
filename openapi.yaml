@@ -44,7 +44,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/User'
+              $ref: '#/components/schemas/LoginRequest'
       responses:
         '200':
           description: User logged in successfully
@@ -361,8 +361,19 @@ components:
           type: string
         email:
           type: string
+          example: 'user@example.com'
         password:
           type: string
+          example: 'Password*159'
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          example: 'user@example.com'
+        password:
+          type: string
+          example: 'Password*159'
     UserResponse:
       type: object
       properties:
@@ -409,13 +420,16 @@ components:
       properties:
         token:
           type: string
+          example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c' # Example JWT token
     SuccessResponse:
       type: object
       properties:
         message:
           type: string
+          example: 'Operation completed successfully'
     ErrorResponse:
       type: object
       properties:
         message:
           type: string
+          example: 'An error occurred'
