@@ -119,7 +119,6 @@ func ParticipateInEvent(db *gorm.DB) fiber.Handler {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": "User not found"})
 		}
 
-		// Check if the user is already a participant
 		isParticipant := false
 		for _, participant := range event.Participants {
 			if participant.ID == userID {
@@ -158,7 +157,6 @@ func CancelParticipation(db *gorm.DB) fiber.Handler {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": "User not found"})
 		}
 
-		// Check if the user is a participant
 		isParticipant := false
 		for _, participant := range event.Participants {
 			if participant.ID == userID {
@@ -176,5 +174,67 @@ func CancelParticipation(db *gorm.DB) fiber.Handler {
 		}
 
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{"message": "Successfully canceled participation in event"})
+	}
+}
+func VoteEvent(db *gorm.DB) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+					userID := c.Locals("userID").(float64)
+					eventID := c.Params("id")
+
+					if eventID == "" {
+									return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": "Event ID is required"})
+					}
+
+					var voteRequest models.VoteRequest
+					if err := c.BodyParser(&voteRequest); err != nil {
+									return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": "Invalid request body"})
+					}
+
+					var voteValue int
+					if voteRequest.Action == models.VoteUp {
+									voteValue = 1
+					} else if voteRequest.Action == models.VoteDown {
+									voteValue = -1
+					} else {
+									return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": "Invalid vote action"})
+					}
+
+					var existingVote models.EventVote
+					if err := db.Where("event_id = ? AND user_id = ?", eventID, uint(userID)).First(&existingVote).Error; err == nil {
+									event := models.Event{}
+									if err := db.Where("id = ?", eventID).First(&event).Error; err != nil {
+													return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": "Event not found"})
+									}
+
+									event.Votes -= existingVote.Vote
+									if err := db.Save(&event).Error; err != nil {
+													return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"message": "Could not update vote"})
+									}
+
+									if err := db.Delete(&existingVote).Error; err != nil {
+													return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"message": "Could not delete vote"})
+									}
+					}
+
+					event := models.Event{}
+					if err := db.Where("id = ?", eventID).First(&event).Error; err != nil {
+									return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": "Event not found"})
+					}
+
+					event.Votes += voteValue
+					if err := db.Save(&event).Error; err != nil {
+									return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"message": "Could not update vote"})
+					}
+
+					vote := models.EventVote{
+									EventID: event.ID,
+									UserID:  uint(userID),
+									Vote:    voteValue,
+					}
+					if err := db.Create(&vote).Error; err != nil {
+									return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"message": "Could not save vote"})
+					}
+
+					return c.Status(fiber.StatusOK).JSON(fiber.Map{"message": "Vote recorded successfully"})
 	}
 }

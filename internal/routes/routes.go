@@ -23,6 +23,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB) {
 	
 	api.Post("/event/:id/participate", auth.Protected(), handlers.ParticipateInEvent(db))
 	api.Post("/event/:id/cancel", auth.Protected(), handlers.CancelParticipation(db))
+	api.Post("/event/:id/vote", auth.Protected(), handlers.VoteEvent(db))
 
 	api.Get("/user", auth.Protected(), handlers.GetAllUsers(db))
 	api.Delete("/user/:id", auth.Protected(), handlers.DeleteUser(db))
