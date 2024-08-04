@@ -48,22 +48,37 @@ func DeleteEvent(db *gorm.DB) fiber.Handler {
 
 func GetEvents(db *gorm.DB) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		events := []models.Event{}
-		if err := db.Preload("Participants").Find(&events).Error; err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"message": "could not get events",
-			})
-		}
+					var events []models.Event
 
-		eventResponses := make([]helpers.EventResponse, len(events))
-		for i, event := range events {
-			eventResponses[i] = helpers.ToEventResponse(event)
-		}
+					page := c.QueryInt("page", 1)
+					limit := c.QueryInt("limit", 10)
+					offset := (page - 1) * limit
 
-		return c.Status(fiber.StatusOK).JSON(fiber.Map{
-			"message": "events fetched successfully",
-			"data":    eventResponses,
-		})
+					eventID := c.Query("event_id")
+
+					query := db.Preload("Participants").Offset(offset).Limit(limit)
+
+					if eventID != "" {
+									query = query.Where("id = ?", eventID)
+					}
+
+					if err := query.Find(&events).Error; err != nil {
+									return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+													"message": "could not get events",
+									})
+					}
+
+					eventResponses := make([]helpers.EventResponse, len(events))
+					for i, event := range events {
+									eventResponses[i] = helpers.ToEventResponse(event)
+					}
+
+					return c.Status(fiber.StatusOK).JSON(fiber.Map{
+									"message": "events fetched successfully",
+									"data":    eventResponses,
+									"page":    page,
+									"limit":   limit,
+					})
 	}
 }
 
