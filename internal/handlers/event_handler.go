@@ -54,13 +54,12 @@ func GetEvents(db *gorm.DB) fiber.Handler {
 					limit := c.QueryInt("limit", 10)
 					offset := (page - 1) * limit
 
-					eventID := c.Query("event_id")
-
-					query := db.Preload("Participants").Offset(offset).Limit(limit)
-
-					if eventID != "" {
-									query = query.Where("id = ?", eventID)
-					}
+					query := db.Preload("Participants").
+									Order("CASE WHEN votes > 0 THEN 1 WHEN votes = 0 THEN 2 ELSE 3 END").
+									Order("votes DESC").
+									Order("id ASC").
+									Offset(offset).
+									Limit(limit)
 
 					if err := query.Find(&events).Error; err != nil {
 									return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{

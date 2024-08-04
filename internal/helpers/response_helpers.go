@@ -7,6 +7,13 @@ type UserResponse struct {
     Name     string `json:"name"`
     Email    string `json:"email"`
     EventIDs []uint `json:"events"`
+    TotalVotes  int              `json:"total_votes"`
+    EventVotes  []EventVoteCount `json:"event_votes"`
+}
+
+type EventVoteCount struct {
+    EventID uint `json:"event_id"`
+    Votes   int  `json:"votes"`
 }
 
 type EventResponse struct {
@@ -17,18 +24,30 @@ type EventResponse struct {
     Location       string `json:"location"`
     UserID         uint   `json:"user_id"`
     ParticipantIDs []uint `json:"participants"`
+    Votes          int    `json:"votes"`  
 }
 
 func ToUserResponse(user models.User) UserResponse {
     eventIDs := make([]uint, len(user.Events))
+    eventVotes := make([]EventVoteCount, len(user.Events))
+    totalVotes := 0
+
     for i, event := range user.Events {
         eventIDs[i] = event.ID
+        eventVotes[i] = EventVoteCount{
+            EventID: event.ID,
+            Votes:   event.Votes,
+        }
+        totalVotes += event.Votes
     }
+
     return UserResponse{
-        ID:       user.ID,
-        Name:     user.Name,
-        Email:    user.Email,
-        EventIDs: eventIDs,
+        ID:         user.ID,
+        Name:       user.Name,
+        Email:      user.Email,
+        EventIDs:   eventIDs,
+        TotalVotes: totalVotes,
+        EventVotes: eventVotes,
     }
 }
 
@@ -45,5 +64,6 @@ func ToEventResponse(event models.Event) EventResponse {
         Location:       event.Location,
         UserID:         event.UserID,
         ParticipantIDs: participantIDs,
+        Votes:          event.Votes,
     }
 }
